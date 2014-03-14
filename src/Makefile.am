@@ -40,9 +40,9 @@ tinyproxy_SOURCES = \
 	regexp.h
 
 EXTRA_DIST = gnuregex.c gnuregex.h
-EXTRA_tinyproxy_SOURCES = filter.c filter.h grammar.h
+EXTRA_tinyproxy_SOURCES = filter.c filter.h grammar.h macproxy.c macproxy.h
 tinyproxy_DEPENDENCIES = @ADDITIONAL_OBJECTS@
-tinyproxy_LDADD = @ADDITIONAL_OBJECTS@
+tinyproxy_LDADD = @ADDITIONAL_OBJECTS@ @ADDITIONAL_LDFLAGS@
 
 scanner.c: scanner.l grammar.h
 	$(LEX) $(LEX_FLAGS) $(LFLAGS) -i $< && mv $(LEX_OUTPUT_ROOT).c $@

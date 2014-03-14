@@ -40,6 +40,9 @@
 #include "text.h"
 #include "utils.h"
 #include "vector.h"
+#ifdef MACOSX
+#include "macproxy.h"
+#endif
 
 /*
  * Maximum length of a HTTP line
@@ -57,8 +60,13 @@
  * enabled.
  */
 #ifdef UPSTREAM_SUPPORT
+# ifdef MACOSX
+#  define UPSTREAM_CONFIGURED() (1)
+#  define UPSTREAM_HOST(host, type) upstream_get2(host, type)
+# else /* not MACOSX */
 #  define UPSTREAM_CONFIGURED() (config.upstream_list != NULL)
 #  define UPSTREAM_HOST(host) upstream_get(host)
+# endif /* MACOSX */
 #else
 #  define UPSTREAM_CONFIGURED() (0)
 #  define UPSTREAM_HOST(host) (NULL)
@@ -86,6 +94,9 @@ struct request_s {
 	uint16_t port;
 
 	char *path;
+#ifdef MACOSX
+	int type;
+#endif
 };
 
 /*
@@ -463,6 +474,31 @@ upstream_get(char *host)
 
 	return up;
 }
+
+#ifdef MACOSX
+/*
+ * Check if a host is in the for MacOS X
+ */
+static struct upstream *
+upstream_get2(char *host, int type)
+{
+    struct upstream *result;
+    static struct upstream up;
+
+    if ((result = upstream_get(host)) != NULL)
+	return result;
+
+    if (up.host == NULL)
+	up.host = safecalloc(1, MAC_PROXYNAME_SIZE);
+    if (up.host == NULL)
+	return NULL;
+
+    if (!GetProxySetting(type, up.host, MAC_PROXYNAME_SIZE, &up.port))
+	return NULL;
+    return &up;
+}
+#endif /* MACOSX */
+
 #endif
 
 /*
@@ -577,10 +613,16 @@ process_request(struct conn_s *connptr, hashmap_t hashofheaders)
 		return NULL;
 	}
 
+#ifdef MACOSX
+	request->type = SERVICE_HTTP;
+#endif
 	if (strncasecmp(url, "http://", 7) == 0
 	    || (UPSTREAM_CONFIGURED() && strncasecmp(url, "ftp://", 6) == 0)) {
 		char *skipped_type = strstr(url, "//") + 2;
-
+#ifdef MACOSX
+		if (strncasecmp(url, "ftp://", 6) == 0)
+		    request->type = SERVICE_FTP;
+#endif
 		if (extract_http_url(skipped_type, request) < 0) {
 			indicate_http_error(connptr, 400, "Bad Request",
 					    "detail", "Could not parse URL",
@@ -593,6 +635,9 @@ process_request(struct conn_s *connptr, hashmap_t hashofheaders)
 			return NULL;
 		}
 	} else if (strcmp(request->method, "CONNECT") == 0) {
+#ifdef MACOSX
+		request->type = SERVICE_HTTPS;
+#endif
 		if (extract_ssl_url(url, request) < 0) {
 			indicate_http_error(connptr, 400, "Bad Request",
 					    "detail", "Could not parse URL",
@@ -1552,7 +1597,11 @@ handle_connection(int fd)
 		goto send_error;
 	}
 
+#ifdef MACOSX
+	connptr->upstream_proxy = UPSTREAM_HOST(request->host, request->type);
+#else
 	connptr->upstream_proxy = UPSTREAM_HOST(request->host);
+#endif
 	if (connptr->upstream_proxy != NULL) {
 		if (connect_to_upstream(connptr, request) < 0) {
 			goto send_error;
