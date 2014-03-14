@@ -41,6 +41,9 @@ struct request_s {
         uint16_t port;
 
         char *path;
+#ifdef MACOSX
+        int type;
+#endif
 };
 
 extern void handle_connection (int fd);

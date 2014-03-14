@@ -27,6 +27,9 @@
 #include "upstream.h"
 #include "heap.h"
 #include "log.h"
+#ifdef MACOSX
+#include "macproxy.h"
+#endif
 
 #ifdef UPSTREAM_SUPPORT
 /**
@@ -221,4 +224,27 @@ void free_upstream_list (struct upstream *up)
         }
 }
 
+#ifdef MACOSX
+/*
+ * Check if a host is in the for MacOS X
+ */
+struct upstream *upstream_get2(char *host, struct upstream *up, int type)
+{
+    struct upstream *result;
+    static struct upstream upx;
+
+    if ((result = upstream_get(host, up)) != NULL)
+	return result;
+
+    if (upx.host == NULL)
+	upx.host = safecalloc(1, MAC_PROXYNAME_SIZE);
+    if (upx.host == NULL)
+	return NULL;
+
+    if (!GetProxySetting(type, upx.host, MAC_PROXYNAME_SIZE, &upx.port))
+	return NULL;
+    return &upx;
+}
+#endif /* MACOSX */
+ 
 #endif

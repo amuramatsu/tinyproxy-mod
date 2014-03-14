@@ -139,6 +139,20 @@ TP_ARG_ENABLE(regexcheck,
 # This is required to build test programs below
 AC_PROG_CC
 
+dnl Include support for MacOS X proxy setting
+AH_TEMPLATE([MACOSX],
+	    [Defined if you would use MacOS X proxy setting.])
+AC_ARG_ENABLE(macosx-proxy,
+              [AC_HELP_STRING([--enable-macosx-proxy],
+                              [Enable support of MacOS X proxy (default is NO)])],
+              macosx_enabled=$enableval, macosx_enabled=no)
+
+if test x"$macosx_enabled" = x"yes"; then
+    ADDITIONAL_OBJECTS="$ADDITIONAL_OBJECTS macproxy.o"
+    ADDITIONAL_LDFLAGS="$ADDITIONAL_LDFLAGS -framework SystemConfiguration -framework CoreFoundation"
+    AC_DEFINE(MACOSX)
+fi
+
 dnl
 dnl Checks for libraries
 dnl
@@ -222,7 +236,10 @@ if test x"$debug_enabled" != x"yes" ; then
     CFLAGS="-DNDEBUG $CFLAGS"
 fi
 
-LDFLAGS="-Wl,-z,defs $LDFLAGS"
+case "$target" in
+    *-darwin*) ;;
+    *)         LDFLAGS="-Wl,-z,defs $LDFLAGS";;
+esac
 
 dnl
 dnl Make sure we can actually handle the "--with-*" and "--enable-*" stuff.
@@ -281,6 +298,7 @@ AC_SUBST(LDFLAGS)
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LIBS)
 AC_SUBST(ADDITIONAL_OBJECTS)
+AC_SUBST(ADDITIONAL_LDFLAGS)
 
 # Check for asciidoc
 AC_PATH_PROG(A2X, a2x, no)
