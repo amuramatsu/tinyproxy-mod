@@ -200,6 +200,7 @@ static void child_main (struct child_s *ptr)
         }
 
         ptr->connects = 0;
+        srand(time(NULL));
 
         /*
          * We have to wait for connections on multiple fds,
@@ -211,7 +212,14 @@ static void child_main (struct child_s *ptr)
         for (i = 0; i < vector_length(listen_fds); i++) {
                 int *fd = (int *) vector_getentry(listen_fds, i, NULL);
 
-                socket_nonblocking(*fd);
+                ret = socket_nonblocking(*fd);
+                if (ret != 0) {
+                        log_message(LOG_ERR, "Failed to set the listening "
+                                    "socket %d to non-blocking: %s",
+                                    fd, strerror(errno));
+                        exit(1);
+                }
+
                 FD_SET(*fd, &rfds);
                 maxfd = max(maxfd, *fd);
         }
@@ -253,7 +261,13 @@ static void child_main (struct child_s *ptr)
                         continue;
                 }
 
-                socket_blocking(listenfd);
+                ret = socket_blocking(listenfd);
+                if (ret != 0) {
+                        log_message(LOG_ERR, "Failed to set listening "
+                                    "socket %d to blocking for accept: %s",
+                                    listenfd, strerror(errno));
+                        exit(1);
+                }
 
                 /*
                  * We have a socket that is readable.
@@ -543,7 +557,7 @@ int child_listening_sockets(vector_t listen_addrs, uint16_t port)
         }
 
         if ((listen_addrs == NULL) ||
-            (vector_length(config.listen_addrs) == 0))
+            (vector_length(listen_addrs) == 0))
         {
                 /*
                  * no Listen directive:
@@ -553,10 +567,10 @@ int child_listening_sockets(vector_t listen_addrs, uint16_t port)
                 return ret;
         }
 
-        for (i = 0; i < vector_length(config.listen_addrs); i++) {
+        for (i = 0; i < vector_length(listen_addrs); i++) {
                 const char *addr;
 
-                addr = (char *)vector_getentry(config.listen_addrs, i, NULL);
+                addr = (char *)vector_getentry(listen_addrs, i, NULL);
                 if (addr == NULL) {
                         log_message(LOG_WARNING,
                                     "got NULL from listen_addrs - skipping");

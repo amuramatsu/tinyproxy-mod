@@ -5,7 +5,7 @@ AC_PREREQ(2.54)
 
 m4_define([tinyproxy_major_version], [1])
 m4_define([tinyproxy_minor_version], [8])
-m4_define([tinyproxy_micro_version], [3])
+m4_define([tinyproxy_micro_version], [4])
 m4_define([tinyproxy_real_version],
           [tinyproxy_major_version.tinyproxy_minor_version.tinyproxy_micro_version])
 m4_define([tinyproxy_version], [tinyproxy_real_version])
@@ -218,6 +218,8 @@ AC_CHECK_FUNCS([gethostname inet_ntoa memchr memset select socket strcasecmp \
                 strchr strdup strerror strncasecmp strpbrk strstr strtol])
 AC_CHECK_FUNCS([isascii memcpy memmove setrlimit ftruncate regcomp regexec])
 AC_CHECK_FUNCS([strlcpy strlcat setgroups])
+
+AC_CHECK_FUNCS([time rand srand])
 
 
 dnl Enable extra warnings

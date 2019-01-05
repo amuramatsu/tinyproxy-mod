@@ -50,6 +50,7 @@ struct hashbucket_s {
 };
 
 struct hashmap_s {
+        uint32_t seed;
         unsigned int size;
         hashmap_iter end_iterator;
 
@@ -63,9 +64,12 @@ struct hashmap_s {
  * The contents of the key are converted to lowercase, so this function
  * is not case-sensitive.
  *
+ * This is Dan Bernstein's hash function as described, for example, here:
+ * http://www.cse.yorku.ca/~oz/hash.html
+ *
  * If any of the arguments are invalid a negative number is returned.
  */
-static int hashfunc (const char *key, unsigned int size)
+static int hashfunc (const char *key, unsigned int size, uint32_t seed)
 {
         uint32_t hash;
 
@@ -74,12 +78,8 @@ static int hashfunc (const char *key, unsigned int size)
         if (size == 0)
                 return -ERANGE;
 
-        for (hash = tolower (*key++); *key != '\0'; key++) {
-                uint32_t bit = (hash & 1) ? (1 << (sizeof (uint32_t) - 1)) : 0;
-
-                hash >>= 1;
-
-                hash += tolower (*key) + bit;
+        for (hash = seed; *key != '\0'; key++) {
+                hash = ((hash << 5) + hash) ^ tolower (*key);
         }
 
         /* Keep the hash within the table limits */
@@ -104,6 +104,7 @@ hashmap_t hashmap_create (unsigned int nbuckets)
         if (!ptr)
                 return NULL;
 
+        ptr->seed = (uint32_t)rand();
         ptr->size = nbuckets;
         ptr->buckets = (struct hashbucket_s *) safecalloc (nbuckets,
                                                            sizeof (struct
@@ -201,7 +202,7 @@ hashmap_insert (hashmap_t map, const char *key, const void *data, size_t len)
         if (!data || len < 1)
                 return -ERANGE;
 
-        hash = hashfunc (key, map->size);
+        hash = hashfunc (key, map->size, map->seed);
         if (hash < 0)
                 return hash;
 
@@ -382,7 +383,7 @@ ssize_t hashmap_search (hashmap_t map, const char *key)
         if (map == NULL || key == NULL)
                 return -EINVAL;
 
-        hash = hashfunc (key, map->size);
+        hash = hashfunc (key, map->size, map->seed);
         if (hash < 0)
                 return hash;
 
@@ -416,7 +417,7 @@ ssize_t hashmap_entry_by_key (hashmap_t map, const char *key, void **data)
         if (!map || !key || !data)
                 return -EINVAL;
 
-        hash = hashfunc (key, map->size);
+        hash = hashfunc (key, map->size, map->seed);
         if (hash < 0)
                 return hash;
 
@@ -451,7 +452,7 @@ ssize_t hashmap_remove (hashmap_t map, const char *key)
         if (map == NULL || key == NULL)
                 return -EINVAL;
 
-        hash = hashfunc (key, map->size);
+        hash = hashfunc (key, map->size, map->seed);
         if (hash < 0)
                 return hash;
 

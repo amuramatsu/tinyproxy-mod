@@ -365,15 +365,6 @@ BAD_REQUEST_ERROR:
                 goto fail;
         }
 
-        if (!url) {
-                log_message (LOG_ERR,
-                             "process_request: Null URL on file descriptor %d",
-                             connptr->client_fd);
-                indicate_http_error (connptr, 400, "Bad Request",
-                                     "detail", "Request has an empty URL",
-                                     "url", url, NULL);
-                goto fail;
-        }
 #ifdef REVERSE_SUPPORT
         if (config.reversepath_list != NULL) {
                 /*
@@ -519,6 +510,7 @@ static int pull_client_data (struct conn_s *connptr, long int length)
 {
         char *buffer;
         ssize_t len;
+        int ret;
 
         buffer =
             (char *) safemalloc (min (MAXBUFFSIZE, (unsigned long int) length));
@@ -544,18 +536,30 @@ static int pull_client_data (struct conn_s *connptr, long int length)
          * return and line feed) at the end of a POST message.  These
          * need to be eaten for tinyproxy to work correctly.
          */
-        socket_nonblocking (connptr->client_fd);
+        ret = socket_nonblocking (connptr->client_fd);
+        if (ret != 0) {
+                log_message(LOG_ERR, "Failed to set the client socket "
+                            "to non-blocking: %s", strerror(errno));
+                goto ERROR_EXIT;
+        }
+
         len = recv (connptr->client_fd, buffer, 2, MSG_PEEK);
-        socket_blocking (connptr->client_fd);
+
+        ret = socket_blocking (connptr->client_fd);
+        if (ret != 0) {
+                log_message(LOG_ERR, "Failed to set the client socket "
+                            "to blocking: %s", strerror(errno));
+                goto ERROR_EXIT;
+        }
 
         if (len < 0 && errno != EAGAIN)
                 goto ERROR_EXIT;
 
         if ((len == 2) && CHECK_CRLF (buffer, len)) {
-                ssize_t ret;
+                ssize_t bytes_read;
 
-                ret = read (connptr->client_fd, buffer, 2);
-                if (ret == -1) {
+                bytes_read = read (connptr->client_fd, buffer, 2);
+                if (bytes_read == -1) {
                         log_message
                                 (LOG_WARNING,
                                  "Could not read two bytes from POST message");
@@ -612,12 +616,20 @@ add_header_to_connection (hashmap_t hashofheaders, char *header, size_t len)
 }
 
 /*
+ * Define maximum number of headers that we accept.
+ * This should be big enough to handle legitimate cases,
+ * but limited to avoid DoS.
+ */
+#define MAX_HEADERS 10000
+
+/*
  * Read all the headers from the stream
  */
 static int get_all_headers (int fd, hashmap_t hashofheaders)
 {
         char *line = NULL;
         char *header = NULL;
+        int count;
         char *tmp;
         ssize_t linelen;
         ssize_t len = 0;
@@ -626,7 +638,7 @@ static int get_all_headers (int fd, hashmap_t hashofheaders)
         assert (fd >= 0);
         assert (hashofheaders != NULL);
 
-        for (;;) {
+        for (count = 0; count < MAX_HEADERS; count++) {
                 if ((linelen = readline (fd, &line)) <= 0) {
                         safefree (header);
                         safefree (line);
@@ -692,6 +704,14 @@ static int get_all_headers (int fd, hashmap_t hashofheaders)
 
                 safefree (line);
         }
+
+        /*
+         * If we get here, this means we reached MAX_HEADERS count.
+         * Bail out with error.
+         */
+        safefree (header);
+        safefree (line);
+        return -1;
 }
 
 /*
@@ -818,7 +838,7 @@ done:
 /*
  * Number of buckets to use internally in the hashmap.
  */
-#define HEADER_BUCKETS 32
+#define HEADER_BUCKETS 256
 
 /*
  * Here we loop through all the headers the client is sending. If we
@@ -1138,8 +1158,19 @@ static void relay_connection (struct conn_s *connptr)
         int maxfd = max (connptr->client_fd, connptr->server_fd) + 1;
         ssize_t bytes_received;
 
-        socket_nonblocking (connptr->client_fd);
-        socket_nonblocking (connptr->server_fd);
+        ret = socket_nonblocking (connptr->client_fd);
+        if (ret != 0) {
+                log_message(LOG_ERR, "Failed to set the client socket "
+                            "to non-blocking: %s", strerror(errno));
+                return;
+        }
+
+        ret = socket_nonblocking (connptr->server_fd);
+        if (ret != 0) {
+                log_message(LOG_ERR, "Failed to set the server socket "
+                            "to non-blocking: %s", strerror(errno));
+                return;
+        }
 
         last_access = time (NULL);
 
@@ -1214,7 +1245,14 @@ static void relay_connection (struct conn_s *connptr)
          * Here the server has closed the connection... write the
          * remainder to the client and then exit.
          */
-        socket_blocking (connptr->client_fd);
+        ret = socket_blocking (connptr->client_fd);
+        if (ret != 0) {
+                log_message(LOG_ERR,
+                            "Failed to set client socket to blocking: %s",
+                            strerror(errno));
+                return;
+        }
+
         while (buffer_size (connptr->sbuffer) > 0) {
                 if (write_buffer (connptr->client_fd, connptr->sbuffer) < 0)
                         break;
@@ -1224,7 +1262,14 @@ static void relay_connection (struct conn_s *connptr)
         /*
          * Try to send any remaining data to the server if we can.
          */
-        socket_blocking (connptr->server_fd);
+        ret = socket_blocking (connptr->server_fd);
+        if (ret != 0) {
+                log_message(LOG_ERR,
+                            "Failed to set server socket to blocking: %s",
+                            strerror(errno));
+                return;
+        }
+
         while (buffer_size (connptr->cbuffer) > 0) {
                 if (write_buffer (connptr->server_fd, connptr->cbuffer) < 0)
                         break;
@@ -1339,7 +1384,7 @@ get_request_entity(struct conn_s *connptr)
                 nread = read_buffer (connptr->client_fd, connptr->cbuffer);
                 if (nread < 0) {
                         log_message (LOG_ERR,
-                                     "Error reading readble client_fd %d",
+                                     "Error reading readable client_fd %d",
                                      connptr->client_fd);
                         ret = -1;
                 } else {
