@@ -69,6 +69,9 @@ extern enum upstream_build_error upstream_add (
                           const char *user, const char *pass,
                           proxy_type type, struct upstream **upstream_list);
 extern struct upstream *upstream_get (char *host, struct upstream *up);
+#ifdef MACOSX
+extern struct upstream *upstream_get2 (char *host, struct upstream *up, int type);
+#endif
 extern void free_upstream_list (struct upstream *up);
 extern const char* upstream_build_error_string(enum upstream_build_error);
 #endif /* UPSTREAM_SUPPORT */

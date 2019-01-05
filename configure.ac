@@ -113,6 +113,20 @@ AM_CONDITIONAL(HAVE_MANPAGE_INTEREST, test x"$manpage_support_enabled" = x"yes")
 # This is required to build test programs below
 AC_PROG_CC
 
+dnl Include support for MacOS X proxy setting
+AH_TEMPLATE([MACOSX],
+	    [Defined if you would use MacOS X proxy setting.])
+AC_ARG_ENABLE(macosx-proxy,
+              [AC_HELP_STRING([--enable-macosx-proxy],
+                              [Enable support of MacOS X proxy (default is NO)])],
+              macosx_enabled=$enableval, macosx_enabled=no)
+
+if test x"$macosx_enabled" = x"yes"; then
+    ADDITIONAL_OBJECTS="$ADDITIONAL_OBJECTS macproxy.o"
+    ADDITIONAL_LDFLAGS="$ADDITIONAL_LDFLAGS -framework SystemConfiguration -framework CoreFoundation"
+    AC_DEFINE(MACOSX)
+fi
+
 dnl
 dnl Checks for libraries
 dnl
@@ -178,6 +192,7 @@ AC_SUBST(LDFLAGS)
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LIBS)
 AC_SUBST(ADDITIONAL_OBJECTS)
+AC_SUBST(ADDITIONAL_LDFLAGS)
 
 if test x"$manpage_support_enabled" = x"yes"; then
 AC_PATH_PROG(POD2MAN, pod2man, no)
