@@ -49,6 +49,9 @@
 #include "connect-ports.h"
 #include "conf.h"
 #include "basicauth.h"
+#ifdef MACOSX
+#include "macproxy.h"
+#endif
 
 /*
  * Maximum length of a HTTP line
@@ -60,8 +63,13 @@
  * enabled.
  */
 #ifdef UPSTREAM_SUPPORT
+# ifdef MACOSX
+#  define UPSTREAM_CONFIGURED() (1)
+#  define UPSTREAM_HOST(host, type) upstream_get2(host, config.upstream_list, type)
+# else /* not MACOSX */
 #  define UPSTREAM_CONFIGURED() (config.upstream_list != NULL)
 #  define UPSTREAM_HOST(host) upstream_get(host, config.upstream_list)
+# endif /* MACOSX */
 #  define UPSTREAM_IS_HTTP(conn) (conn->upstream_proxy != NULL && conn->upstream_proxy->type == PT_HTTP)
 #else
 #  define UPSTREAM_CONFIGURED() (0)
@@ -398,10 +406,18 @@ BAD_REQUEST_ERROR:
         }
 #endif
 
+#ifdef MACOSX
+        request->type = SERVICE_HTTPS;
+#endif
         if (strncasecmp (url, "http://", 7) == 0
             || (UPSTREAM_CONFIGURED () && strncasecmp (url, "ftp://", 6) == 0))
         {
                 char *skipped_type = strstr (url, "//") + 2;
+#ifdef MACOSX
+                if (strncasecmp(url, "ftp://", 6) == 0) {
+                        request->type = SERVICE_FTP;
+                }
+#endif
 
                 if (extract_url (skipped_type, HTTP_PORT, request) < 0) {
                         indicate_http_error (connptr, 400, "Bad Request",
@@ -410,6 +426,9 @@ BAD_REQUEST_ERROR:
                         goto fail;
                 }
         } else if (strcmp (request->method, "CONNECT") == 0) {
+#ifdef MACOSX
+                request->type = SERVICE_HTTPS;
+#endif
                 if (extract_url (url, HTTP_PORT_SSL, request) < 0) {
                         indicate_http_error (connptr, 400, "Bad Request",
                                              "detail", "Could not parse URL",
@@ -1661,7 +1680,11 @@ void handle_connection (int fd)
                 goto fail;
         }
 
+#ifdef MACOSX
+        connptr->upstream_proxy = UPSTREAM_HOST (request->host, request->type);
+#else
         connptr->upstream_proxy = UPSTREAM_HOST (request->host);
+#endif
         if (connptr->upstream_proxy != NULL) {
                 if (connect_to_upstream (connptr, request) < 0) {
                         goto fail;

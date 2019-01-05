@@ -58,6 +58,9 @@ extern void upstream_add (const char *host, int port, const char *domain,
                           const char *user, const char *pass,
                           proxy_type type, struct upstream **upstream_list);
 extern struct upstream *upstream_get (char *host, struct upstream *up);
+#ifdef MACOSX
+extern struct upstream *upstream_get2 (char *host, struct upstream *up, int type);
+#endif
 extern void free_upstream_list (struct upstream *up);
 #endif /* UPSTREAM_SUPPORT */
 
